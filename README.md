@@ -1,5 +1,25 @@
 # LifelongAgentBench: Evaluating LLM Agents as Lifelong Learners
 
+<p align="center">
+    <img src="https://img.picui.cn/free/2025/05/21/682d857c0cb55.png" alt="Logo" width="80px">
+
+[//]: # (    <br>)
+[//]: # (    <b>WebArena is a standalone, self-hostable web environment for building autonomous agents</b>)
+</p>
+
+<p align="center">
+<a href="https://www.python.org/downloads/release/python-3119/"><img src="https://img.shields.io/badge/python-3.11-blue.svg" alt="Python 3.11"></a>
+<a href="https://pre-commit.com/"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white" alt="pre-commit"></a>
+<a href="https://github.com/psf/black"><img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black"></a>
+<a href="https://mypy-lang.org/"><img src="https://img.shields.io/badge/mypy-strict-blue" alt="Checked with mypy"></a>
+</p>
+
+<p align="center">
+<a href="https://caixd-220529.github.io/LifelongAgentBench/">ProjectPage</a> •
+<a href="https://arxiv.org/abs/2505.11942">Paper</a> •
+<a href="https://huggingface.co/datasets/csyq/LifelongAgentBench">Dataset</a>
+</p>
+
 # Setup
 
 ```shell
