@@ -1,7 +1,13 @@
 import argparse
 import re
 from multiprocessing import Process
+import sys
+from pathlib import Path
 import time
+
+# Add the project root to the Python path
+project_root = Path(__file__).resolve().parents[2]
+sys.path.append(str(project_root))
 
 from src.tasks import Task, TaskServer, DatasetItem
 from src.factories import ChatHistoryItemFactoryServer
@@ -40,7 +46,12 @@ def main() -> None:
         help="Path to the configuration file.",
     )
     args = parser.parse_args()
-    raw_config = ConfigLoader().load_from(args.config_path)
+
+    config_path = Path(args.config_path)
+    if not config_path.is_absolute():
+        config_path = (project_root / config_path).resolve()
+
+    raw_config = ConfigLoader().load_from(config_path)
     assert raw_config["environment_config"][
         "use_task_client_flag"
     ], "Task client is not enabled in configuration."

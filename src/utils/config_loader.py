@@ -29,29 +29,29 @@ class ConfigLoader:
         self.loaded: dict[str, Any] = dict()
 
     def load_from(self, path) -> dict:
-        path = os.path.realpath(path)
-        if path in self.loading:
-            raise Exception("Circular import detected: {}".format(path))
-        if path in self.loaded:
-            return deepcopy(self.loaded[path])
-        if not os.path.exists(path):
-            raise Exception("File not found: {}".format(path))
-        if path.endswith(".yaml") or path.endswith(".yml"):
-            with open(path) as f:
+        path_str = str(path)
+        if path_str in self.loading:
+            raise Exception("Circular import detected: {}".format(path_str))
+        if path_str in self.loaded:
+            return deepcopy(self.loaded[path_str])
+        if not os.path.exists(path_str):
+            raise Exception("File not found: {}".format(path_str))
+        if path_str.endswith(".yaml") or path_str.endswith(".yml"):
+            with open(path_str) as f:
                 config = yaml.safe_load(f)
-        elif path.endswith(".json"):
-            with open(path) as f:
+        elif path_str.endswith(".json"):
+            with open(path_str) as f:
                 config = json.load(f)
         else:
-            raise Exception("Unknown file type: {}".format(path))
-        self.loading.add(path)
+            raise Exception("Unknown file type: {}".format(path_str))
+        self.loading.add(path_str)
         try:
-            config = self.parse_imports(os.path.dirname(path), config)
+            config = self.parse_imports(os.path.dirname(path_str), config)
         except Exception as e:
-            self.loading.remove(path)
+            self.loading.remove(path_str)
             raise e
-        self.loading.remove(path)
-        self.loaded[path] = config
+        self.loading.remove(path_str)
+        self.loaded[path_str] = config
         return self.parse_default_and_overwrite(deepcopy(config))
 
     def parse_imports(self, path, raw_config):

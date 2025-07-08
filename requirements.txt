@@ -5,10 +5,10 @@ mysql-connector-python~=9.1.0
 pydantic~=2.10.3
 pyyaml~=6.0.2
 torch~=2.3.1
-transformers~=4.43.1
+# transformers~=4.43.1 # transformers pinned by LifelongAgentBench (overridden; see constraints.txt)
 uvicorn~=0.22.0
 fastapi==0.115.5
-requests~=2.31.0
+requests>=2.32.2
 colorama~=0.4.6
 sparqlwrapper~=2.0.0
 psutil~=6.0.0

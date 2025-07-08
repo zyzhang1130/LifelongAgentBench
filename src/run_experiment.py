@@ -295,6 +295,7 @@ class ConfigUtility:
 
 
 def main() -> None:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "4"
     # region Prepare variables
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str)
