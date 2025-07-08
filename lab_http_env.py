@@ -10,7 +10,7 @@ class LABHTTPEnv:
         # health‑check
         for _ in range(30):
             try:
-                if requests.get(self.base + "/api/ping", timeout=1).ok:
+                if requests.post(self.base + "/api/ping", timeout=1).ok:
                     break
             except requests.exceptions.ConnectionError:
                 time.sleep(1)
