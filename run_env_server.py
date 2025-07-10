@@ -23,7 +23,7 @@ def build_controller(port: int):
         )
     )
     ctrl = ServerSideController(logger)
-    uvicorn.run(ctrl.app, host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run(ctrl.app, host="0.0.0.0", port=port, log_level="debug")
 
 
 if __name__ == "__main__":

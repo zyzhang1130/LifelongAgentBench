@@ -1,5 +1,7 @@
 # lab_http_env.py  -------------------------------------------------------
 import requests, time
+from src.typings.session import Session
+from src.typings.request import TaskRequest
 
 
 class LABHTTPEnv:
@@ -18,7 +20,18 @@ class LABHTTPEnv:
             raise RuntimeError("LAB server not responding")
 
     def reset(self):
-        return requests.post(self.base + "/api/reset").json()
+        session = Session(task_name="db_bench", sample_index=0)
+        request = TaskRequest.Reset(session=session)
+        response = requests.post(self.base + "/api/reset", json=request.model_dump())
+        try:
+            return response.json()
+        except requests.exceptions.JSONDecodeError as e:
+            print(
+                f"Failed to decode JSON from server. Status code: {response.status_code}"
+            )
+            print("Server response:")
+            print(response.text)
+            raise e
 
     def step(self, action: str):
         """Send ONE action string; return dict with keys

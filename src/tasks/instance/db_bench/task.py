@@ -284,10 +284,19 @@ class DBBench(Task[DBBenchDatasetItem]):
         dataset: dict[SampleIndex, DBBenchDatasetItem] = {}
         for key, entry in data.items():
             dataset_item = DBBench._construct_dataset_item(entry)
-            dataset[key] = dataset_item
+            # Convert string keys to integers to match session.sample_index type
+            sample_index = int(key) if key.isdigit() else key
+            dataset[sample_index] = dataset_item
         self._set_dataset(dataset)
         # Construct docker container immediately
-        self.container = DBBenchContainer()
+        import traceback
+
+        try:
+            self.container = DBBenchContainer()
+        except Exception:
+            with open("db_bench_error.log", "w") as f:
+                traceback.print_exc(file=f)
+            raise
 
     @staticmethod
     def _construct_dataset_item(entry: dict[str, Any]) -> DBBenchDatasetItem:

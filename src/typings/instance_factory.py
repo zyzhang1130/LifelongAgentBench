@@ -87,32 +87,40 @@ class GeneralInstanceFactory(BaseModel, InstanceFactoryInterface):
         return v
 
     def create(self) -> Any:
-        # print('>>>>>>>> ', self.module, self.parameters)
-        splits = self.module.split(".")
-        if len(splits) == 0:
-            raise Exception("Invalid module name: {}".format(self.module))
-        for parameter in self.parameters:
-            try:
-                self.parameters[parameter] = self.model_validate(
-                    self.parameters[parameter]
-                ).create()
-            except ValidationError:
-                pass
-        if len(splits) == 1:
-            g = globals()
-            if self.module in g:
-                class_type = g[self.module]
+        import traceback
+
+        try:
+            # print('>>>>>>>> ', self.module, self.parameters)
+            splits = self.module.split(".")
+            if len(splits) == 0:
+                raise Exception("Invalid module name: {}".format(self.module))
+            for parameter in self.parameters:
+                try:
+                    self.parameters[parameter] = self.model_validate(
+                        self.parameters[parameter]
+                    ).create()
+                except ValidationError:
+                    pass
+            if len(splits) == 1:
+                g = globals()
+                if self.module in g:
+                    class_type = g[self.module]
+                else:
+                    # class_type = getattr(builtins, self.module)
+                    raise RuntimeError(
+                        "GeneralInstanceFactory cannot instantiate built-in types perfectly. "
+                        "Use SimpleImmutableTypeInstanceFactory instead."
+                    )
+                return class_type(**self.parameters)
             else:
-                # class_type = getattr(builtins, self.module)
-                raise RuntimeError(
-                    "GeneralInstanceFactory cannot instantiate built-in types perfectly. "
-                    "Use SimpleImmutableTypeInstanceFactory instead."
-                )
-            return class_type(**self.parameters)
-        else:
-            path = ".".join(self.module.split(".")[:-1])
-            mod = __import__(path, fromlist=[self.module.split(".")[-1]])
-            return getattr(mod, self.module.split(".")[-1])(**self.parameters)
+                path = ".".join(self.module.split(".")[:-1])
+                mod = __import__(path, fromlist=[self.module.split(".")[-1]])
+                return getattr(mod, self.module.split(".")[-1])(**self.parameters)
+        except Exception:
+            with open("factory_error.log", "w") as f:
+                traceback.print_exc(file=f)
+            raise
+        # This block is now inside the try...except block above
 
 
 class InstanceFactoryUtility:
