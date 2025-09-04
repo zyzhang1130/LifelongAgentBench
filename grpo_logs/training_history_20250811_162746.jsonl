@@ -1,0 +1,10 @@
+{
+  "type": "config",
+  "model_name": "Qwen/Qwen2.5-7B-Instruct",
+  "entropy_pctl": 0.9,
+  "batch_size": 4,
+  "max_tokens": 512,
+  "timestamp": "20250811_162746",
+  "num_generations": 4,
+  "learning_rate": 5e-06
+}

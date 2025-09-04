@@ -15,20 +15,35 @@ class DBBenchContainer:
         self.deleted = False
         self.image = image
         self.client = docker.from_env()
-        p = DBBenchContainer.port + random.randint(0, 10000)
-        while self.is_port_open(p):
-            p += random.randint(0, 20)
-        self.port = p
-        self.container: containers.Container = self.client.containers.run(
-            image,
-            name=f"mysql_{self.port}",
-            environment={"MYSQL_ROOT_PASSWORD": self.password},
-            ports={"3306": self.port},
-            detach=True,
-            tty=True,
-            stdin_open=True,
-            remove=True,
-        )
+
+        # Try to use any existing MySQL container first
+        existing_containers = self.client.containers.list(filters={"name": "mysql_"})
+        if existing_containers:
+            # Use the first available MySQL container
+            self.container = existing_containers[0]
+            # Extract port from container name (e.g., mysql_18246 -> 18246)
+            container_name = self.container.name
+            self.port = int(container_name.split("_")[1])
+            print(
+                f"Using existing MySQL container: {container_name} on port {self.port}"
+            )
+        else:
+            # If no existing containers, create a new one
+            p = DBBenchContainer.port + random.randint(0, 10000)
+            while self.is_port_open(p):
+                p += random.randint(0, 20)
+            self.port = p
+            print(f"Creating new MySQL container on port {self.port}")
+            self.container: containers.Container = self.client.containers.run(
+                image,
+                name=f"mysql_{self.port}",
+                environment={"MYSQL_ROOT_PASSWORD": self.password},
+                ports={"3306": self.port},
+                detach=True,
+                tty=True,
+                stdin_open=True,
+                remove=True,
+            )
 
         time.sleep(1)
 
@@ -72,18 +87,27 @@ class DBBenchContainer:
         try:
             cursor = self.conn.cursor()
             if database:
-                cursor.execute(f"use `{database}`;")
-                cursor.fetchall()
+                cursor.execute(f"USE `{database}`;")
+                # Don't fetchall() for USE statements - they have no result set
+
             sql_list = multiple_sql.split(";")
             sql_list = [sql.strip() for sql in sql_list if sql.strip() != ""]
             result = ""
             for sql in sql_list:
                 cursor.execute(sql)
-                result = str(cursor.fetchall())
+                # Only fetch if there's a result set (SELECT, SHOW, etc.)
+                if cursor.with_rows:
+                    result = str(cursor.fetchall())
+                else:
+                    result = ""  # DDL/DML statements don't return rows
                 self.conn.commit()
         except Exception as e:
             result = str(e)
         return result
+
+    def check_branch_cleanup(self) -> str:
+        """Sanity check to verify ephemeral databases are cleaned up properly."""
+        return self.execute("SHOW DATABASES LIKE '%__branch_%';", database="mysql")
 
     def is_port_open(
         self, port: int

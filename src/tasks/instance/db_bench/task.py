@@ -343,10 +343,12 @@ class DBBench(Task[DBBenchDatasetItem]):
         # endregion
         # region Get instruction
         question_prefix = entry["instruction"]
-        question_suffix = (
-            f"The name of this table is {table_info.name}, and the headers of this table are "
-            f"{', '.join([column_info.name for column_info in column_info_list])}."
-        )
+        ## Original question_suffix. Incomplete info for agent to take action.
+        # question_suffix = (
+        #     f"The name of this table is {table_info.name}, and the headers of this table are "
+        #     f"{', '.join([column_info.name for column_info in column_info_list])}."
+        # )
+        question_suffix = f"Table information: {json.dumps(table_info.model_dump())}"
         instruction = f"{question_prefix}\n{question_suffix}"
         # endregion
         # region Construct DatasetItem
@@ -502,9 +504,17 @@ class DBBench(Task[DBBenchDatasetItem]):
 
     def _interact(self, session: Session) -> None:
         # region Preparation
-        parser_result = DBBench._parse_agent_response(
-            session.chat_history.get_item_deep_copy(-1).content
-        )
+        agent_response = session.chat_history.get_item_deep_copy(-1).content
+        print(f"🔍 DEBUG: Agent response = '{agent_response}'")
+
+        parser_result = DBBench._parse_agent_response(agent_response)
+        print(f"🔍 DEBUG: Parser result action = {parser_result.action}")
+        print(f"🔍 DEBUG: Parser result content = '{parser_result.content}'")
+        if parser_result.finish_reason:
+            print(
+                f"🔍 DEBUG: Parser result finish_reason = '{parser_result.finish_reason}'"
+            )
+
         current_dataset_item: DBBenchDatasetItem = self._get_current_dataset_item()
         # endregion
         # region Execute action
@@ -551,10 +561,12 @@ class DBBench(Task[DBBenchDatasetItem]):
         # endregion
 
     def _complete(self, session: Session) -> None:
+        print("🔍 DEBUG: _complete() called!")
         # region Clean up
         current_dataset_item: DBBenchDatasetItem = self._get_current_dataset_item()
         self.container.execute(
-            f"drop database `{current_dataset_item.database_name}`"  # noqa
+            f"DROP DATABASE IF EXISTS `{current_dataset_item.database_name}`;",
+            database="mysql",  # Switch to neutral DB before dropping
         )
         # endregion
         # region Validate the correctness of agent answer
@@ -563,16 +575,23 @@ class DBBench(Task[DBBenchDatasetItem]):
             assert isinstance(session.task_output, dict)
             agent_answer = session.task_output["answer"]
             assert isinstance(agent_answer, str)
+            print(f"🔍 DEBUG: agent_answer = '{agent_answer}'")
         except:  # noqa
             # Usually because SampleStatus.TASK_UNKNOWN_ERROR.
             # Do not do further justification here, since it is too extreme.
             agent_answer = ""
+            print(f"🔍 DEBUG: Exception getting agent_answer, using empty string")
         answer_info = current_dataset_item.answer_info
+        print(f"🔍 DEBUG: answer_info.answer_type = {answer_info.answer_type}")
+        print(f"🔍 DEBUG: answer_info.answer_md5 = {answer_info.answer_md5}")
         # endregion
         # region Validate answer
         match answer_info.answer_type:
             case AnswerType.MD5:
                 correct_flag = agent_answer == answer_info.answer_md5
+                print(
+                    f"🔍 DEBUG: MD5 comparison: '{agent_answer}' == '{answer_info.answer_md5}' → {correct_flag}"
+                )
             case AnswerType.DIRECT:
                 ground_truth = answer_info.answer_direct
                 assert (
@@ -581,13 +600,82 @@ class DBBench(Task[DBBenchDatasetItem]):
                 correct_flag = DirectTypeAnswerValidator.validate(
                     agent_answer, ground_truth
                 )
+                print(
+                    f"🔍 DEBUG: Direct validation: '{agent_answer}' vs {ground_truth} → {correct_flag}"
+                )
             case _:
                 raise NotImplementedError()
         # endregion
         # endregion
+        print(f"🔍 DEBUG: correct_flag: {correct_flag}")
+        print(
+            f"🔍 DEBUG: Setting outcome to {'correct' if correct_flag else 'incorrect'}"
+        )
         session.evaluation_record.outcome = SessionEvaluationOutcome.from_bool(
             correct_flag
         )
+
+    def create_isolated_copy(self):
+        """Create isolated task copy that reuses the same container but with ephemeral database names."""
+        isolated_task = object.__new__(DBBench)
+
+        # Initialize the parent Task class
+        Task.__init__(
+            isolated_task,
+            task_name=self.task_name,
+            chat_history_item_factory=self.chat_history_item_factory,
+            max_round=self.max_round,
+        )
+
+        # Shallow copy dataset mapping - we'll modify items to use ephemeral DB names
+        dataset = dict(getattr(self, "_Task__dataset"))
+        isolated_task._set_dataset(dataset)
+
+        # REUSE the same container (no new container per branch)
+        isolated_task.container = self.container
+
+        return isolated_task
+
+    def _clone_item_with_db(
+        self, item: DBBenchDatasetItem, new_db: str
+    ) -> DBBenchDatasetItem:
+        """Clone a dataset item with a new database name."""
+        return item.model_copy(update={"database_name": new_db})
+
+    def restore_state_from_session(self, session: "Session"):
+        """Restore task state to match the given session."""
+        # Set basic task state
+        self.current_sample_index = session.sample_index
+        self.current_round = 0  # Will be incremented by interact()
+
+        # Set current dataset item
+        dataset = getattr(self, "_Task__dataset")
+        if session.sample_index in dataset:
+            setattr(self, "_Task__current_dataset_item", dataset[session.sample_index])
+
+        # Rebuild database state by replaying the session
+        current_dataset_item = self._get_current_dataset_item()
+
+        # Initialize fresh database with initial data
+        init_sql = DBBench._build_init_sql(current_dataset_item)
+        self.container.execute(init_sql)
+
+        # Replay SQL operations from session history to restore DB state
+        chat_history = session.chat_history.value
+        for i, msg in enumerate(chat_history):
+            if msg.get("role") == "agent" and i < len(chat_history) - 1:
+                # This is an agent message, check if it executed SQL
+                agent_response = msg.get("content", "")
+                parser_result = DBBench._parse_agent_response(agent_response)
+
+                if parser_result.action == AgentAction.EXECUTE:
+                    sql = parser_result.content
+                    try:
+                        # Execute the SQL to restore database state
+                        self.container.execute(sql, current_dataset_item.database_name)
+                    except Exception:
+                        # If replay fails, we'll just proceed - the branch might fail
+                        pass
 
     def _release(self) -> None:
         try:
